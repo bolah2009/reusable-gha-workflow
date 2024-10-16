@@ -7,7 +7,7 @@ on:
         required: true
         type: string
     secrets:
-      GITHUB_TOKEN:
+      GH_TOKEN:
         required: true
   pull_request:
 
@@ -20,15 +20,15 @@ jobs:
   dependabot:
     runs-on: ubuntu-latest
     env:
-      PR_URL: ${{github.event.pull_request.html_url || inputs.PR_URL}}
-      GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      PR_URL: ${{inputs.PR_URL || github.event.pull_request.html_url}}
+      GH_TOKEN: ${{secrets.GH_TOKEN || secrets.GITHUB_TOKEN}}
     if: github.actor == 'dependabot[bot]'
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@v2
         with:
-          github-token: '${{ secrets.GITHUB_TOKEN }}'
+          github-token: '${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}'
 
       - name: Close Dependabot PRs that are not patch version
         if: steps.metadata.outputs.dependency-group != 'security-updates' && steps.metadata.outputs.dependency-group != 'version-updates'
