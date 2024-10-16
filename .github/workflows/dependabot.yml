@@ -1,0 +1,39 @@
+name: Manage Dependabot PRs
+
+on:
+  workflow_call:
+    inputs:
+      PR_URL:
+        required: true
+        type: string
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+  pull_request:
+
+permissions:
+  pull-requests: write
+  issues: write
+  repository-projects: write
+
+jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+    env:
+      PR_URL: ${{github.event.pull_request.html_url || inputs.PR_URL}}
+      GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: '${{ secrets.GITHUB_TOKEN }}'
+
+      - name: Close Dependabot PRs that are not patch version
+        if: steps.metadata.outputs.dependency-group != 'security-updates' && steps.metadata.outputs.dependency-group != 'version-updates'
+        run: gh pr close "$PR_URL" -c "Closing as it is not a group update."
+
+      - name: Enable auto-merge for Dependabot PRs
+        if: steps.metadata.outputs.dependency-group == 'security-updates' || steps.metadata.outputs.dependency-group == 'version-updates'
+        run: gh pr merge --auto --squash "$PR_URL"
