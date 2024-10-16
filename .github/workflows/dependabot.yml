@@ -30,7 +30,7 @@ jobs:
         with:
           github-token: '${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}'
 
-      - name: Close Dependabot PRs that are not patch version
+      - name: Close Dependabot PRs that are not grouped version/security updates
         if: steps.metadata.outputs.dependency-group != 'security-updates' && steps.metadata.outputs.dependency-group != 'version-updates'
         run: gh pr close "$PR_URL" -c "Closing as it is not a group update."
 
