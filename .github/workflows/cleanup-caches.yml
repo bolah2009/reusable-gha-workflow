@@ -1,0 +1,82 @@
+name: Cleanup GHA Caches
+
+on:
+  workflow_call:
+    inputs:
+      REPO:
+        required: true
+        type: string
+      branch_ref:
+        description: 'The branch reference to clean up caches for'
+        required: true
+        type: string
+      is_closed:
+        description: 'Whether the PR is closed or not'
+        required: true
+        type: boolean
+    secrets:
+      GH_TOKEN:
+        required: true
+
+permissions:
+  # pull-requests: read
+  contents: read
+  # issues: write
+  # repository-projects: write
+  actions: write
+
+jobs:
+  cleanup:
+    name: Clean up caches
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      REPO: ${{ inputs.REPO }}
+    steps:
+      - name: Install GitHub Actions Cache CLI
+        run: gh extension install actions/gh-actions-cache
+
+      - name: Fetch List of Cache Keys
+        run: |
+          echo "Fetching list of cache keys for branch: ${{ inputs.branch_ref }}"
+          gh actions-cache list -R $REPO -B ${{ inputs.branch_ref }} -L 100 --sort created-at --order asc | cut -f 1 > cache-list.txt
+          echo "Found $(cat cache-list.txt | wc -w) cache"
+
+      - name: Cleanup Cache Keys
+        if: ${{ inputs.is_closed }}
+        run: |
+          ## Setting this to not fail the workflow while deleting cache keys.
+          set +e
+          echo "Deleting all $(cat cache-list.txt | wc -w) cache(s) for closed PR..."
+          cacheKeysForPR=$(cat cache-list.txt)
+          for cacheKey in $cacheKeysForPR
+          do
+              echo "Deleting cache with key: $cacheKey"
+              gh actions-cache delete $cacheKey -R $REPO -B ${{ inputs.branch_ref }} --confirm
+          done
+          echo "Done"
+
+      - name: Cleanup Cache Keys (Exclude Last 4)
+        if: ${{ !inputs.is_closed }}
+        run: |
+          cacheKeysForPR=$(cat cache-list.txt)
+          total_lines=$(echo "$cacheKeysForPR" | wc -w)
+          lines_to_keep=$((total_lines - 4))
+          echo "Deleting all $lines_to_keep cache(s) ..."
+
+          ## Only proceed if there are more than 4 cache keys.
+          if [ "$lines_to_keep" -gt 0 ]; then
+              echo $cacheKeysForPR
+              keys_to_delete=$(echo "$cacheKeysForPR" | awk '{for(i=1;i<=NF-4;i++) print $i}')
+              ## Setting this to not fail the workflow while deleting cache keys.
+              set +e
+              echo "Deleting caches (excluding last 4 created)... for $keys_to_delete "
+              for cacheKey in $keys_to_delete
+              do
+                  echo "Deleting cache: $cacheKey"
+                  gh actions-cache delete $cacheKey -R $REPO -B ${{ inputs.branch_ref }} --confirm
+              done
+          else
+              echo "Less than or equal to 4 cache keys, nothing to delete."
+          fi
+          echo "Done"
