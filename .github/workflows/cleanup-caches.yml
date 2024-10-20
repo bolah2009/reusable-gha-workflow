@@ -1,0 +1,60 @@
+name: Cleanup GHA Caches
+
+on:
+  workflow_call:
+    inputs:
+      REPO:
+        description: 'The name of the repository to cleanup'
+        required: true
+        type: string
+    secrets:
+      GH_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  cleanup:
+    name: Clean up caches
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      REPO: ${{ inputs.REPO }}
+    steps:
+      - name: Install GitHub Actions Cache CLI
+        run: gh extension install actions/gh-actions-cache
+
+      - name: Fetch List of Cache Keys
+        run: |
+          echo "Fetching list of cache keys"
+          gh actions-cache list -R $REPO -L 100 --sort created-at --order asc | cut -f 1 > cache-list.txt
+          echo "Found $(cat cache-list.txt | wc -l) cache(s)."
+          echo "Listing all caches found"
+          i=1
+          while IFS= read -r cacheKey; do
+              echo -e "NO $i cache with key: $cacheKey \n"
+              i=$((i + 1))
+          done < cache-list.txt
+
+      - name: Cleanup Cache Keys (Exclude Last 5)
+        run: |
+          mapfile -t cacheKeysForPR < cache-list.txt
+          total_keys=${#cacheKeysForPR[@]}
+          lines_to_keep=$((total_keys - 5))
+
+          ## Only proceed if there are more than 5 cache keys.
+          if [ "$lines_to_keep" -gt 0 ]; then
+              echo "Deleting all but the last 4 of $total_keys cache(s)..."
+              for ((i=0; i<lines_to_keep; i++)); do
+                  cacheKey=${cacheKeysForPR[i]}
+                  echo "Deleting cache: $cacheKey"
+                  ## Setting this to not fail the workflow while deleting cache keys.
+                  set +e
+                  gh actions-cache delete "$cacheKey" -R $REPO --confirm
+              done
+          else
+              echo "Less than or equal to 5 cache keys, nothing to delete."
+          fi
+          echo "Done"
